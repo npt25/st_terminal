@@ -1,0 +1,4 @@
+streamlit
+vnstock3
+pandas
+openpyxl
