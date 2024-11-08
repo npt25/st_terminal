@@ -129,7 +129,7 @@ if st.sidebar.button("Lấy dữ liệu"):
             with st.container():
                 st.subheader("Tổng hợp dữ liệu tài chính")
                 st.table(stock_data_result[['Năm', 'VỐN CHỦ SỞ HỮU (Tỷ đồng)', 'Doanh thu (Tỷ đồng)', 'Lợi nhuận sau thuế của Cổ đông công ty mẹ (Tỷ đồng)',
-                                           'Net cash inflows/outflows from operating activities', 'Nợ dài hạn (Tỷ đồng)', 'EPS', 'BVPS', 'OCPS']])
+                                           'Net cash inflows/outflows from operating activities', 'Nợ dài hạn (Tỷ đồng)', 'EPS', 'BVPS', 'OCPS', 'P/E']])
 
             # Tạo bảng giá trị hiện tại (Present Value)
             cagr_column_name = f'Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) {num_years} năm (%)'
