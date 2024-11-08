@@ -1,15 +1,16 @@
+import streamlit as st
 from vnstock3 import Vnstock
 import pandas as pd
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor
 
 # Khởi tạo đối tượng Vnstock để lấy danh sách cổ phiếu
 stock_data = Vnstock()
 
-# Lấy danh sách tất cả các mã chứng khoán tự động từ TCBS
-symbols = stock_data.stock(symbol='ACB', source='VCI').listing.all_symbols()['ticker'].tolist()
+# Nhập mã cổ phiếu từ người dùng thông qua Streamlit
+st.title("Phân tích tài chính cổ phiếu")
+symbol = st.text_input("Nhập mã cổ phiếu:")
 
-# Tạo danh sách để lưu các DataFrame dữ liệu tài chính của tất cả các mã cổ phiếu
+# Tạo danh sách để lưu các DataFrame dữ liệu tài chính của mã cổ phiếu
 all_data = []
 
 # Hàm để lấy dữ liệu tài chính cho một mã cổ phiếu
@@ -101,65 +102,59 @@ def fetch_stock_data(symbol):
 
         return merged_data
     except Exception as e:
-        print(f"Lỗi xảy ra với mã cổ phiếu {symbol}: {e}")
+        st.error(f"Lỗi xảy ra với mã cổ phiếu {symbol}: {e}")
         return None
 
-# Sử dụng ThreadPoolExecutor để chạy song song các yêu cầu
-with ThreadPoolExecutor(max_workers=5) as executor:
-    results = list(executor.map(fetch_stock_data, symbols))
+# Lấy dữ liệu tài chính cho mã cổ phiếu được nhập
+if symbol:
+    stock_data_result = fetch_stock_data(symbol)
 
-# Lọc ra các kết quả không phải là None
-all_data = [data for data in results if data is not None]
+    # Nếu có dữ liệu, tiếp tục thực hiện các bước tính toán
+    if stock_data_result is not None:
+        filtered_data = stock_data_result[stock_data_result['ROE (%)'] > 15]
 
-# Bước 3: Kết hợp tất cả dữ liệu từ các cổ phiếu thành một DataFrame duy nhất
-if all_data:
-    final_data = pd.concat(all_data, ignore_index=True)
+        # Tính Median của P/E trong 10 năm gần nhất cho mã cổ phiếu
+        filtered_data['P/E Median'] = filtered_data['P/E'].dropna().median() if len(filtered_data['P/E'].dropna()) > 0 else None
 
-    # Lọc kết quả với ROE > 15%
-    filtered_data = final_data[final_data['ROE (%)'] > 15]
+        # Tính CAGR Future
+        filtered_data['CAGR Vốn Chủ Sở Hữu'] = filtered_data['Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) 10 năm (%)']
+        filtered_data['CAGR Doanh Thu'] = filtered_data['Tăng trưởng Doanh thu (Tỷ đồng) 10 năm (%)']
+        filtered_data['CAGR Future (%)'] = filtered_data[['CAGR Vốn Chủ Sở Hữu', 'CAGR Doanh Thu']].min(axis=1)
 
-    # Tính Median của P/E trong 10 năm gần nhất cho mỗi mã cổ phiếu
-    filtered_data['P/E Median'] = filtered_data.groupby('Mã cổ phiếu')['P/E'].transform(lambda x: x.dropna().median() if len(x.dropna()) > 0 else None)
+        # Tính EPS Future sau 10 năm
+        filtered_data['EPS 2023'] = filtered_data.loc[filtered_data['Năm'] == 2023, 'EPS']
+        filtered_data['EPS Future'] = filtered_data['EPS 2023'] * ((1 + filtered_data['CAGR Future (%)'] / 100) ** 10)
 
-    # Tính CAGR Future cho mỗi mã cổ phiếu
-    filtered_data['CAGR Vốn Chủ Sở Hữu'] = filtered_data['Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) 10 năm (%)']
-    filtered_data['CAGR Doanh Thu'] = filtered_data['Tăng trưởng Doanh thu (Tỷ đồng) 10 năm (%)']
-    filtered_data['CAGR Future (%)'] = filtered_data[['CAGR Vốn Chủ Sở Hữu', 'CAGR Doanh Thu']].min(axis=1)
+        # Tính Value Future sau 10 năm
+        filtered_data['Value Future'] = filtered_data['EPS Future'] * filtered_data['P/E Median']
 
-    # Tính EPS Future sau 10 năm
-    filtered_data['EPS 2023'] = filtered_data.loc[filtered_data['Năm'] == 2023, 'EPS']
-    filtered_data['EPS Future'] = filtered_data['EPS 2023'] * ((1 + filtered_data['CAGR Future (%)'] / 100) ** 10)
+        # Tính Value Present với r = 15% và số năm là 10
+        discount_rate = 0.15
+        filtered_data['Value Present'] = filtered_data['Value Future'] / ((1 + discount_rate) ** 10)
 
-    # Tính Value Future sau 10 năm
-    filtered_data['Value Future'] = filtered_data['EPS Future'] * filtered_data['P/E Median']
+        # Tính MOS (Margin of Safety)
+        filtered_data['MOS'] = filtered_data['Value Present'] / 2
 
-    # Tính Value Present với r = 15% và số năm là 10
-    discount_rate = 0.15
-    filtered_data['Value Present'] = filtered_data['Value Future'] / ((1 + discount_rate) ** 10)
+        # Tạo bảng Present Value
+        present_value_df = filtered_data[['Mã cổ phiếu', 'Value Present', 'MOS']]
+        st.write("### Present Value", present_value_df)
 
-    # Tính MOS (Margin of Safety)
-    filtered_data['MOS'] = filtered_data['Value Present'] / 2
+        # Lấy số lượng cổ phiếu lưu hành năm 2023
+        filtered_data['Outstanding Shares 2023'] = filtered_data.loc[filtered_data['Năm'] == 2023, 'Số CP lưu hành']
 
-    # Tạo bảng Present Value
-    present_value_df = filtered_data[['Mã cổ phiếu', 'Value Present', 'MOS']]
+        # Tính MOS Market Cap
+        filtered_data['MOS Market Cap'] = filtered_data['MOS'] * filtered_data['Outstanding Shares 2023']
 
-    # Lấy số lượng cổ phiếu lưu hành năm 2023
-    filtered_data['Outstanding Shares 2023'] = filtered_data.loc[filtered_data['Năm'] == 2023, 'Số CP lưu hành']
+        # Tạo bảng MOS Market Cap
+        mos_market_cap_df = filtered_data[['Mã cổ phiếu', 'MOS', 'Outstanding Shares 2023', 'MOS Market Cap']]
+        st.write("### MOS Market Cap", mos_market_cap_df)
 
-    # Tính MOS Market Cap
-    filtered_data['MOS Market Cap'] = filtered_data['MOS'] * filtered_data['Outstanding Shares 2023']
+        # Tạo bảng Pay Back Time
+        payback_time_list = []
 
-    # Tạo bảng MOS Market Cap
-    mos_market_cap_df = filtered_data[['Mã cổ phiếu', 'MOS', 'Outstanding Shares 2023', 'MOS Market Cap']]
-
-    # Tạo bảng Pay Back Time cho từng mã cổ phiếu
-    payback_time_list = []
-
-    for symbol in filtered_data['Mã cổ phiếu'].unique():
-        stock_data = filtered_data[filtered_data['Mã cổ phiếu'] == symbol]
-        eps_2023 = stock_data['EPS 2023'].values[0]
-        shares_2023 = stock_data['Outstanding Shares 2023'].values[0]
-        cagr_future = stock_data['CAGR Future (%)'].values[0] / 100
+        eps_2023 = filtered_data['EPS 2023'].values[0]
+        shares_2023 = filtered_data['Outstanding Shares 2023'].values[0]
+        cagr_future = filtered_data['CAGR Future (%)'].values[0] / 100
 
         years = list(range(16))
         retained_earning = []
@@ -173,13 +168,8 @@ if all_data:
         payback_time_df = pd.DataFrame({'Mã cổ phiếu': symbol, 'Years': years, 'Retained Earning': retained_earning})
         payback_time_list.append(payback_time_df)
 
-    payback_time_final_df = pd.concat(payback_time_list, ignore_index=True)
+        payback_time_final_df = pd.concat(payback_time_list, ignore_index=True)
+        st.write("### Pay Back Time", payback_time_final_df)
 
-    # Xuất các bảng ra file Excel
-    with pd.ExcelWriter('/Users/phanninh/Documents/GitHub/vnstock/financial_analysis_results.xlsx', engine='openpyxl') as writer:
-        present_value_df.to_excel(writer, sheet_name='Present Value', index=False)
-        mos_market_cap_df.to_excel(writer, sheet_name='MOS Market Cap', index=False)
-        payback_time_final_df.to_excel(writer, sheet_name='Pay Back Time', index=False)
-
-else:
-    print("Không có dữ liệu nào để kết hợp.")
+    else:
+        st.warning("Không có dữ liệu nào để kết hợp.")
