@@ -2,7 +2,7 @@ import streamlit as st
 from vnstock3 import Vnstock
 import pandas as pd
 import numpy as np
-import io  # Thêm import io
+import io
 
 # Khởi tạo đối tượng Vnstock để lấy danh sách cổ phiếu
 stock_data = Vnstock()
@@ -83,11 +83,23 @@ if st.sidebar.button("Lấy dữ liệu"):
 
         # Nếu có dữ liệu
         if stock_data_result is not None:
+            # Xác định các cột cần thiết và kiểm tra chúng có tồn tại hay không
+            required_columns = [
+                'Năm', 'VỐN CHỦ SỞ HỮU (Tỷ đồng)', 'Doanh thu (Tỷ đồng)', 
+                'Lợi nhuận sau thuế của Cổ đông công ty mẹ (Tỷ đồng)',
+                'Net cash inflows/outflows from operating activities', 'Nợ dài hạn (Tỷ đồng)', 
+                'EPS', 'BVPS', 'OCPS', 'P/E'
+            ]
+
+            available_columns = [col for col in required_columns if col in stock_data_result.columns]
+
             # Tạo bảng tổng hợp các chỉ số tài chính
             with st.container():
                 st.subheader("Tổng hợp dữ liệu tài chính")
-                st.table(stock_data_result[['Năm', 'VỐN CHỦ SỞ HỮU (Tỷ đồng)', 'Doanh thu (Tỷ đồng)', 'Lợi nhuận sau thuế của Cổ đông công ty mẹ (Tỷ đồng)',
-                                           'Net cash inflows/outflows from operating activities', 'Nợ dài hạn (Tỷ đồng)', 'EPS', 'BVPS', 'OCPS', 'P/E']])
+                if available_columns:
+                    st.table(stock_data_result[available_columns])
+                else:
+                    st.error("Không có cột nào phù hợp để hiển thị")
 
             # Tạo bảng giá trị hiện tại (Present Value)
             cagr_column_name = f'Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) {num_years} năm (%)'
@@ -140,15 +152,20 @@ if st.sidebar.button("Lấy dữ liệu"):
                 st.subheader("Pay Back Time")
                 st.table(payback_data)
 
+
             # Tải về file Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 stock_data_result.to_excel(writer, index=False, sheet_name='Tổng hợp dữ liệu tài chính')
-                present_value_summary.to_excel(writer, index=False, sheet_name='Present Value')
+               present_value_summary.to_excel(writer, index=False, sheet_name='Present Value')
                 mos_market_cap_summary.to_excel(writer, index=False, sheet_name='MOS Market Cap')
                 payback_data.to_excel(writer, index=False, sheet_name='Pay Back Time')
-            
-            st.download_button(label="Tải về file Excel", data=output.getvalue(), file_name=f"{symbol}_stock_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+            st.download_button(
+                label="Tải về file Excel", 
+                data=output.getvalue(), 
+                file_name=f"{symbol}_stock_data.xlsx", 
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
             st.error(f"Không tìm thấy dữ liệu cho mã cổ phiếu {symbol}.")
