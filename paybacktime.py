@@ -110,8 +110,7 @@ if st.sidebar.button("Lấy dữ liệu"):
                 st.table(mos_market_cap_summary)
 
             # Tạo bảng Pay Back Time
-            payback_data = pd.DataFrame({'Years': range(0, 15)})
-            payback_data['Retained Earning (million)'] = [None for _ in range(15)]  # Giá trị này cần được tính toán phù hợp trước
+            payback_data = pd.DataFrame({'Years': range(0, 15), 'Retained Earning (million)': [None] * 15})
 
             with st.container():
                 st.subheader("Pay Back Time")
