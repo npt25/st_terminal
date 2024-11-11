@@ -65,6 +65,40 @@ if st.sidebar.button("Lấy dữ liệu"):
                 balance_sheet_filtered['Nợ dài hạn/Vốn chủ sở hữu (%)'] = (balance_sheet_filtered['Nợ dài hạn (Tỷ đồng)'] / balance_sheet_filtered['VỐN CHỦ SỞ HỮU (Tỷ đồng)']) * 100
                 balance_sheet_filtered['ROIC (%)'] = (income_statement_filtered['Lợi nhuận sau thuế của Cổ đông công ty mẹ (Tỷ đồng)'] / (balance_sheet_filtered['VỐN CHỦ SỞ HỮU (Tỷ đồng)'] + balance_sheet_filtered['Nợ dài hạn (Tỷ đồng)'])) * 100
 
+                # Tính toán các giá trị cho bảng Giá trị hiện tại (Present Value)
+                pe_median = financial_ratios_filtered['P/E'].median()
+                eps_2023 = financial_ratios_filtered.loc[financial_ratios_filtered['Năm'] == 2023, 'EPS'].values[0] if 'EPS' in financial_ratios_filtered.columns else None
+                
+                # Tính CAGR Future (tăng trưởng vốn chủ sở hữu trung bình năm)
+                cagr_column_name = f'Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) {num_years} năm (%)'
+                if 'VỐN CHỦ SỞ HỮU (Tỷ đồng)' in balance_sheet_filtered.columns:
+                    start_value = balance_sheet_filtered.loc[balance_sheet_filtered['Năm'] == (2023 - num_years + 1), 'VỐN CHỦ SỞ HỮU (Tỷ đồng)'].values[0]
+                    end_value = balance_sheet_filtered.loc[balance_sheet_filtered['Năm'] == 2023, 'VỐN CHỦ SỞ HỮU (Tỷ đồng)'].values[0]
+                    if start_value > 0:
+                        cagr_future = ((end_value / start_value) ** (1 / (num_years - 1))) - 1
+                        cagr_future = cagr_future * 100
+                    else:
+                        cagr_future = None
+                else:
+                    cagr_future = None
+
+                # Tính EPS Future
+                if eps_2023 is not None and cagr_future is not None:
+                    eps_future = eps_2023 * ((1 + (cagr_future / 100)) ** 10)
+                else:
+                    eps_future = None
+
+                # Tính Value Future và Value Present
+                if eps_future is not None and not pd.isna(pe_median):
+                    value_future = eps_future * pe_median
+                    value_present = value_future / ((1 + 0.15) ** 10)  # Sử dụng chiết khấu 15%
+                else:
+                    value_future = None
+                    value_present = None
+
+                # Tính MOS
+                mos = value_present / 2 if value_present is not None else None
+
                 # Kết hợp tất cả các chỉ số của mã cổ phiếu hiện tại
                 merged_data = balance_sheet_filtered.merge(income_statement_filtered, on='Năm', how='inner')
                 merged_data = merged_data.merge(cash_flow_filtered, on='Năm', how='inner')
@@ -73,13 +107,13 @@ if st.sidebar.button("Lấy dữ liệu"):
                 # Thêm cột mã cổ phiếu vào DataFrame
                 merged_data.insert(0, 'Mã cổ phiếu', symbol)
 
-                return merged_data
+                return merged_data, pe_median, cagr_future, eps_future, value_future, value_present, mos
             except Exception as e:
                 st.error(f"Lỗi xảy ra với mã cổ phiếu {symbol}: {e}")
-                return None
+                return None, None, None, None, None, None, None
 
         # Lấy dữ liệu tài chính cho mã cổ phiếu được nhập
-        stock_data_result = fetch_stock_data(symbol, num_years)
+        stock_data_result, pe_median, cagr_future, eps_future, value_future, value_present, mos = fetch_stock_data(symbol, num_years)
 
         # Nếu có dữ liệu
         if stock_data_result is not None:
@@ -90,18 +124,6 @@ if st.sidebar.button("Lấy dữ liệu"):
                                            'Net cash inflows/outflows from operating activities', 'Nợ dài hạn (Tỷ đồng)', 'EPS', 'BVPS', 'P/E']])
 
             # Tạo bảng giá trị hiện tại (Present Value)
-            cagr_column_name = f'Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) {num_years} năm (%)'
-            pe_median = stock_data_result['P/E'].median()
-            cagr_future = stock_data_result[cagr_column_name].median() if cagr_column_name in stock_data_result.columns else None
-            eps_2023 = stock_data_result[stock_data_result['Năm'] == 2023]['EPS'].iloc[0]
-            if not pd.isna(eps_2023) and not pd.isna(cagr_future):
-                eps_future = eps_2023 * ((1 + (cagr_future / 100)) ** 10)
-            else:
-                eps_future = None
-            value_future = eps_future * pe_median if eps_future is not None else None
-            value_present = value_future / ((1 + 0.15) ** 10) if value_future is not None else None
-            mos = value_present / 2 if value_present is not None else None
-
             present_value_summary = pd.DataFrame({
                 '': ['P/E Median', 'CAGR Future', 'EPS Future', 'Value Future', 'Value Present', 'MOS'],
                 'Giá trị': [pe_median, cagr_future, eps_future, value_future, value_present, mos]
@@ -111,42 +133,11 @@ if st.sidebar.button("Lấy dữ liệu"):
                 st.subheader("Giá trị hiện tại (Present Value)")
                 st.table(present_value_summary)
 
-            # Tạo bảng MOS Market Cap
-            shares_2023 = stock_data_result[stock_data_result['Năm'] == 2023]['Số CP lưu hành'].iloc[0] * 1_000_000
-            mos_market_cap_value = mos * shares_2023 if mos is not None else None
-
-            mos_market_cap_summary = pd.DataFrame({
-                '': ['MOS', 'Outstanding Shares 2023', 'MOS Market Cap'],
-                'Giá trị': [mos, shares_2023, mos_market_cap_value]
-            })
-
-            with st.container():
-                st.subheader("MOS Market Cap")
-                st.table(mos_market_cap_summary)
-
-            # Tạo bảng Pay Back Time
-            payback_data = pd.DataFrame({'Years': range(0, 15)})
-            retained_earning = []
-            retained_earning_year_0 = eps_2023 * shares_2023 / 1_000_000 if not pd.isna(eps_2023) and not pd.isna(shares_2023) else 0
-            retained_earning.append(retained_earning_year_0)
-
-            for year in range(1, 15):
-                retained_earning_year = retained_earning[-1] * (1 + cagr_future / 100) if cagr_future is not None else retained_earning[-1]
-                retained_earning.append(retained_earning_year)
-
-            payback_data['Retained Earning (million)'] = retained_earning
-
-            with st.container():
-                st.subheader("Pay Back Time")
-                st.table(payback_data)
-
             # Tải về file Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 stock_data_result.to_excel(writer, index=False, sheet_name='Tổng hợp dữ liệu tài chính')
                 present_value_summary.to_excel(writer, index=False, sheet_name='Present Value')
-                mos_market_cap_summary.to_excel(writer, index=False, sheet_name='MOS Market Cap')
-                payback_data.to_excel(writer, index=False, sheet_name='Pay Back Time')
 
             st.download_button(
                 label="Tải về file Excel", 
