@@ -2,6 +2,7 @@ import streamlit as st
 from vnstock3 import Vnstock
 import pandas as pd
 import numpy as np
+import io
 
 # Khởi tạo đối tượng Vnstock để lấy danh sách cổ phiếu
 stock_data = Vnstock()
