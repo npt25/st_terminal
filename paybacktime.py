@@ -90,9 +90,21 @@ if st.sidebar.button("Lấy dữ liệu"):
                                            'Net cash inflows/outflows from operating activities', 'Nợ dài hạn (Tỷ đồng)', 'EPS', 'BVPS', 'P/E']])
 
             # Tạo bảng giá trị hiện tại (Present Value)
+            cagr_column_name = f'Tăng trưởng VỐN CHỦ SỞ HỮU (Tỷ đồng) {num_years} năm (%)'
+            pe_median = stock_data_result['P/E'].median()
+            cagr_future = stock_data_result[cagr_column_name].median() if cagr_column_name in stock_data_result.columns else None
+            eps_2023 = stock_data_result[stock_data_result['Năm'] == 2023]['EPS'].iloc[0]
+            if not pd.isna(eps_2023) and not pd.isna(cagr_future):
+                eps_future = eps_2023 * ((1 + (cagr_future / 100)) ** 10)
+            else:
+                eps_future = None
+            value_future = eps_future * pe_median if eps_future is not None else None
+            value_present = value_future / ((1 + 0.15) ** 10) if value_future is not None else None
+            mos = value_present / 2 if value_present is not None else None
+
             present_value_summary = pd.DataFrame({
                 '': ['P/E Median', 'CAGR Future', 'EPS Future', 'Value Future', 'Value Present', 'MOS'],
-                'Giá trị': [None, None, None, None, None, None]  # Giá trị này cần được tính toán phù hợp trước
+                'Giá trị': [pe_median, cagr_future, eps_future, value_future, value_present, mos]
             })
 
             with st.container():
@@ -100,9 +112,12 @@ if st.sidebar.button("Lấy dữ liệu"):
                 st.table(present_value_summary)
 
             # Tạo bảng MOS Market Cap
+            shares_2023 = stock_data_result[stock_data_result['Năm'] == 2023]['Số CP lưu hành'].iloc[0] * 1_000_000
+            mos_market_cap_value = mos * shares_2023 if mos is not None else None
+
             mos_market_cap_summary = pd.DataFrame({
                 '': ['MOS', 'Outstanding Shares 2023', 'MOS Market Cap'],
-                'Giá trị': [None, None, None]  # Giá trị này cần được tính toán phù hợp trước
+                'Giá trị': [mos, shares_2023, mos_market_cap_value]
             })
 
             with st.container():
@@ -110,7 +125,16 @@ if st.sidebar.button("Lấy dữ liệu"):
                 st.table(mos_market_cap_summary)
 
             # Tạo bảng Pay Back Time
-            payback_data = pd.DataFrame({'Years': range(0, 15), 'Retained Earning (million)': [None] * 15})
+            payback_data = pd.DataFrame({'Years': range(0, 15)})
+            retained_earning = []
+            retained_earning_year_0 = eps_2023 * shares_2023 / 1_000_000 if not pd.isna(eps_2023) and not pd.isna(shares_2023) else 0
+            retained_earning.append(retained_earning_year_0)
+
+            for year in range(1, 15):
+                retained_earning_year = retained_earning[-1] * (1 + cagr_future / 100) if cagr_future is not None else retained_earning[-1]
+                retained_earning.append(retained_earning_year)
+
+            payback_data['Retained Earning (million)'] = retained_earning
 
             with st.container():
                 st.subheader("Pay Back Time")
