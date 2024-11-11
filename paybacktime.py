@@ -187,7 +187,6 @@ if st.sidebar.button("Lấy dữ liệu"):
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     stock_data_result.to_excel(writer, index=False, sheet_name=symbol)
                 st.download_button(label="Tải về file Excel", data=output.getvalue(), file_name=f"{symbol}_stock_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
             else:
                 st.error(f"Không tìm thấy dữ liệu cho mã cổ phiếu {symbol}.")
 
