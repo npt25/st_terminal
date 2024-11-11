@@ -68,8 +68,8 @@ if st.sidebar.button("Lấy dữ liệu"):
                 # Tính tỷ lệ tăng trưởng hàng năm (CAGR)
                 growth_metrics = []
                 for metric in ['Doanh thu (Tỷ đồng)', 'VỐN CHỦ SỞ HỮU (Tỷ đồng)', 'EPS', 'BVPS']:
-                    start_value = stock_data_result[metric].iloc[0]
-                    end_value = stock_data_result[metric].iloc[-1]
+                    start_value = balance_sheet_filtered[metric].iloc[0]
+                    end_value = balance_sheet_filtered[metric].iloc[-1]
                     if start_value > 0:
                         cagr = ((end_value / start_value) ** (1 / (num_years - 1)) - 1) * 100
                     else:
