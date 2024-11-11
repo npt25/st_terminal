@@ -2,7 +2,7 @@ import streamlit as st
 from vnstock3 import Vnstock
 import pandas as pd
 import numpy as np
-import io
+import io  # Thêm import io
 
 # Khởi tạo đối tượng Vnstock để lấy danh sách cổ phiếu
 stock_data = Vnstock()
@@ -64,49 +64,6 @@ if st.sidebar.button("Lấy dữ liệu"):
                 balance_sheet_filtered['ROE (%)'] = (income_statement_filtered['Lợi nhuận sau thuế của Cổ đông công ty mẹ (Tỷ đồng)'] / balance_sheet_filtered['VỐN CHỦ SỞ HỮU (Tỷ đồng)']) * 100
                 balance_sheet_filtered['Nợ dài hạn/Vốn chủ sở hữu (%)'] = (balance_sheet_filtered['Nợ dài hạn (Tỷ đồng)'] / balance_sheet_filtered['VỐN CHỦ SỞ HỮU (Tỷ đồng)']) * 100
                 balance_sheet_filtered['ROIC (%)'] = (income_statement_filtered['Lợi nhuận sau thuế của Cổ đông công ty mẹ (Tỷ đồng)'] / (balance_sheet_filtered['VỐN CHỦ SỞ HỮU (Tỷ đồng)'] + balance_sheet_filtered['Nợ dài hạn (Tỷ đồng)'])) * 100
-
-                # Tính OCPS (Operating Cashflow Per Share)
-                if 'Số CP lưu hành' in financial_ratios_filtered.columns and 'Net cash inflows/outflows from operating activities' in cash_flow_filtered.columns:
-                    cash_flow_filtered['OCPS'] = cash_flow_filtered['Net cash inflows/outflows from operating activities'] / (financial_ratios_filtered['Số CP lưu hành'] * 1_000_000)
-                else:
-                    cash_flow_filtered['OCPS'] = None
-
-                # Tính tỷ lệ tăng trưởng hàng năm trong num_years của doanh thu, vốn chủ sở hữu, EPS, BVPS, OCPS
-                metrics_info = {
-                    'Doanh thu (Tỷ đồng)': income_statement_filtered,
-                    'VỐN CHỦ SỞ HỮU (Tỷ đồng)': balance_sheet_filtered,
-                    'EPS': financial_ratios_filtered,
-                    'BVPS': financial_ratios_filtered,
-                    'OCPS': cash_flow_filtered
-                }
-
-                for metric, data_source in metrics_info.items():
-                    final_year = 2023
-                    initial_year = final_year - (num_years - 1)
-                    column_name = f'Tăng trưởng {metric} {num_years} năm (%)'
-
-                    if (initial_year in data_source['Năm'].values) and (final_year in data_source['Năm'].values):
-                        initial_value = data_source.loc[data_source['Năm'] == initial_year, metric].values[0]
-                        final_value = data_source.loc[data_source['Năm'] == final_year, metric].values[0]
-                        threshold = 0.001
-                        if abs(initial_value) > threshold:
-                            nper = num_years - 1
-                            cagr_years = ((final_value / initial_value) ** (1 / nper)) - 1
-                            data_source[column_name] = cagr_years * 100
-                        else:
-                            data_source[column_name] = None
-                    else:
-                        data_source[column_name] = None
-
-                # Tạo bảng kết quả tỷ lệ tăng trưởng hàng năm
-                growth_metrics = pd.DataFrame({
-                    'Chỉ số': [f'Tăng trưởng {metric} {num_years} năm (%)' for metric in metrics_info.keys()],
-                    'Giá trị': [metrics_info[metric][f'Tăng trưởng {metric} {num_years} năm (%)'].iloc[-1] for metric in metrics_info.keys()]
-                })
-
-                with st.container():
-                    st.subheader("Tỷ lệ tăng trưởng hàng năm (CAGR)")
-                    st.table(growth_metrics)
 
                 # Kết hợp tất cả các chỉ số của mã cổ phiếu hiện tại
                 merged_data = balance_sheet_filtered.merge(income_statement_filtered, on='Năm', how='inner')
@@ -186,9 +143,12 @@ if st.sidebar.button("Lấy dữ liệu"):
             # Tải về file Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                stock_data_result.to_excel(writer, index=False, sheet_name=symbol)
+                stock_data_result.to_excel(writer, index=False, sheet_name='Tổng hợp dữ liệu tài chính')
+                present_value_summary.to_excel(writer, index=False, sheet_name='Present Value')
+                mos_market_cap_summary.to_excel(writer, index=False, sheet_name='MOS Market Cap')
+                payback_data.to_excel(writer, index=False, sheet_name='Pay Back Time')
+            
             st.download_button(label="Tải về file Excel", data=output.getvalue(), file_name=f"{symbol}_stock_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         else:
             st.error(f"Không tìm thấy dữ liệu cho mã cổ phiếu {symbol}.")
-
